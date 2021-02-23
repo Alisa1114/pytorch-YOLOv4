@@ -42,8 +42,8 @@ Cfg.track = 0
 Cfg.w = Cfg.width
 Cfg.h = Cfg.height
 Cfg.flip = 1
-Cfg.blur = 0
-Cfg.gaussian = 0
+Cfg.blur = 1 # 2021/2/23 changed, blur = 0=>1
+Cfg.gaussian = 1 # 2021/2/23 changed, gaussian = 0=>1
 Cfg.boxes = 60  # box num
 Cfg.TRAIN_EPOCHS = 300
 Cfg.train_label = 'data/train.txt'
