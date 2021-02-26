@@ -420,8 +420,12 @@ class Yolov4(nn.Module):
 
 
 if  __name__ == "__main__":
+    print("Model Start!!")
+    
     import sys
     from PIL import Image
+    import cv2
+    import numpy as np
 
     namesfile = None
     if len(sys.argv) == 4:
@@ -453,12 +457,51 @@ if  __name__ == "__main__":
     use_cuda = 1
     if use_cuda:
         model.cuda()
-
+    
+    '''
+    #PIL
     img = Image.open(imgfile).convert('RGB')
+    w, h = img.size
     sized = img.resize((608, 608))
+    if h > w:
+        sized = img.resize((608, 608))
+        sized = sized.rotate(-90)
+    else:
+        sized = img.resize((608, 608))
+    
+    
+    '''
+   
+    #opencv
+    img = cv2.imread(imgfile)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    sized = cv2.resize(img, (608, 608))
+    
+    
+    
+    
+    '''
+    #轉圖片的話還是怪怪得
+    h, w, _ = img.shape
+    if h > w: #height > width
+        img = np.rot90(img)
+        img = np.array(img)
+        img = cv2.resize(img, (w, h))
+        
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    cv2.imwrite('test/copy.jpg', sized)
+    img = cv2.imread('test/copy.jpg')
+    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    sized = cv2.resize(img, (608, 608))
+    '''
+    
     from tool.utils import *
 
-    boxes = do_detect(model, sized, 0.5, n_classes,0.4, use_cuda)
+    boxes = do_detect(model, sized, 0.5, n_classes, 0.4, use_cuda)
+    print(boxes)
 
     class_names = load_class_names(namesfile)
-    plot_boxes(img, boxes, 'predictions.jpg', class_names)
+    #plot_boxes(img, boxes, 'predictions.jpg', class_names)
+    plot_boxes_cv2(sized, boxes, 'predictions.jpg', class_names) # cv2
+    
+    print("Model End!!")
