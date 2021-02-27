@@ -18,7 +18,7 @@ from tensorboardX import SummaryWriter
 import logging
 import os, sys
 from tqdm import tqdm
-from dataset_copy import Yolo_dataset #changed 02/18
+from dataset import Yolo_dataset
 from cfg import Cfg
 from models import Yolov4
 import argparse
@@ -255,7 +255,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
 
     val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8,
                             pin_memory=True, drop_last=True)
-    
+
     writer = SummaryWriter(log_dir=config.TRAIN_TENSORBOARD_DIR,
                            filename_suffix=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}',
                            comment=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}')
@@ -303,7 +303,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
     model.train()
     for epoch in range(epochs):
         #model.train()
-        epoch_loss = 0.0
+        epoch_loss = 0
         epoch_step = 0
 
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img', ncols=50) as pbar:
@@ -320,9 +320,9 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                 loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(bboxes_pred, bboxes)
                 # loss = loss / config.subdivisions
                 loss.backward()
-                
+
                 epoch_loss += loss.item()
-                
+
                 if global_step  % config.subdivisions == 0:
                     optimizer.step()
                     scheduler.step()
@@ -354,7 +354,7 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
 
                 pbar.update(images.shape[0])
 
-            if (save_cp)&((epoch+1)%10==0):
+            if save_cp:
                 try:
                     os.mkdir(config.checkpoints)
                     logging.info('Created checkpoint directory')
@@ -441,14 +441,11 @@ if __name__ == "__main__":
     model.to(device=device)
 
     try:
-        print("Start Traing")
         train(model=model,
               config=cfg,
               epochs=cfg.TRAIN_EPOCHS,
               device=device, )
-        print("Stop Training")
     except KeyboardInterrupt:
-        print("Keyboard Interrupt")
         torch.save(model.state_dict(), 'INTERRUPTED.pth')
         logging.info('Saved interrupt')
         try:

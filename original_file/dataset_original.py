@@ -8,16 +8,16 @@
     @Author    :
     @Time      :
     @Detail    :
+
 '''
 from torch.utils.data.dataset import Dataset
-from cfg import Cfg
+
 import random
 import cv2
 import sys
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-
 
 
 def rand_uniform_strong(min, max):
@@ -99,8 +99,8 @@ def rect_intersection(a, b):
     return [minx, miny, maxx, maxy]
 
 
-def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue, dsat, dexp, gaussian_noise, blur, truth):
-    
+def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue, dsat, dexp, gaussian_noise, blur,
+                            truth):
     try:
         img = mat
         oh, ow, _ = img.shape
@@ -113,7 +113,7 @@ def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue,
         dst_rect = [max(0, -pleft), max(0, -ptop), max(0, -pleft) + new_src_rect[2] - new_src_rect[0],
                     max(0, -ptop) + new_src_rect[3] - new_src_rect[1]]
         # cv2.Mat sized
-        
+
         if (src_rect[0] == 0 and src_rect[1] == 0 and src_rect[2] == img.shape[0] and src_rect[3] == img.shape[1]):
             sized = cv2.resize(img, (w, h), cv2.INTER_LINEAR)
         else:
@@ -125,21 +125,15 @@ def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue,
 
             # resize
             sized = cv2.resize(cropped, (w, h), cv2.INTER_LINEAR)
-        
-        
+
         # flip
         if flip:
             # cv2.Mat cropped
-            #print('flip')
             sized = cv2.flip(sized, 1)  # 0 - x-axis, 1 - y-axis, -1 - both axes (x & y)
-        
-        
-        
+
         # HSV augmentation
         # cv2.COLOR_BGR2HSV, cv2.COLOR_RGB2HSV, cv2.COLOR_HSV2BGR, cv2.COLOR_HSV2RGB
-        
         if dsat != 1 or dexp != 1 or dhue != 0:
-            #print('hsv')
             if img.shape[2] >= 3:
                 hsv_src = cv2.cvtColor(sized.astype(np.float32), cv2.COLOR_RGB2HSV)  # RGB to HSV
                 hsv = cv2.split(hsv_src)
@@ -150,54 +144,39 @@ def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue,
                 sized = np.clip(cv2.cvtColor(hsv_src, cv2.COLOR_HSV2RGB), 0, 255)  # HSV to RGB (the same as previous)
             else:
                 sized *= dexp
-        
+
         if blur:
-            #print('blur')
             if blur == 1:
                 dst = cv2.GaussianBlur(sized, (17, 17), 0)
-                #dst = cv2.blur(sized, (17, 17), 0)
                 # cv2.bilateralFilter(sized, dst, 17, 75, 75)
             else:
                 ksize = (blur / 2) * 2 + 1
-                #ksize = 31
                 dst = cv2.GaussianBlur(sized, (ksize, ksize), 0)
-            
-            #用起來有問題
-            #if blur == 1:
-            #    img_rect = [0, 0, sized.cols, sized.rows]
-            #    for b in truth:
-            #        left = (b.x - b.w / 2.) * sized.shape[1]
-            #        width = b.w * sized.shape[1]
-            #        top = (b.y - b.h / 2.) * sized.shape[0]
-            #        height = b.h * sized.shape[0]
-            #        roi(left, top, width, height)
-            #        roi = roi & img_rect
-            #        dst[roi[0]:roi[0] + roi[2], roi[1]:roi[1] + roi[3]] = sized[roi[0]:roi[0] + roi[2],
-            #                                                              roi[1]:roi[1] + roi[3]]
+
+            if blur == 1:
+                img_rect = [0, 0, sized.cols, sized.rows]
+                for b in truth:
+                    left = (b.x - b.w / 2.) * sized.shape[1]
+                    width = b.w * sized.shape[1]
+                    top = (b.y - b.h / 2.) * sized.shape[0]
+                    height = b.h * sized.shape[0]
+                    roi(left, top, width, height)
+                    roi = roi & img_rect
+                    dst[roi[0]:roi[0] + roi[2], roi[1]:roi[1] + roi[3]] = sized[roi[0]:roi[0] + roi[2],
+                                                                          roi[1]:roi[1] + roi[3]]
+
             sized = dst
-       
-        #if gaussian_noise: #原本的gaussian_noise
-        #    print('noise')
-        #    #print(gaussian_noise)
-        #    noise = np.array(sized.shape)
-        #    gaussian_noise = min(gaussian_noise, 127)
-        #    gaussian_noise = max(gaussian_noise, 0)
-        #    cv2.randn(noise, 0, gaussian_noise)  # mean and variance
-        #    sized = sized + noise
-        
-        if gaussian_noise: #更正版
-            #print('noise')
-            noise = sized.copy()
+
+        if gaussian_noise:
+            noise = np.array(sized.shape)
             gaussian_noise = min(gaussian_noise, 127)
             gaussian_noise = max(gaussian_noise, 0)
-            cv2.randn(noise,0, gaussian_noise)  # mean and variance
+            cv2.randn(noise, 0, gaussian_noise)  # mean and variance
             sized = sized + noise
-        
-        
     except:
         print("OpenCV can't augment image: " + str(w) + " x " + str(h))
         sized = mat
-    
+
     return sized
 
 
@@ -270,7 +249,7 @@ class Yolo_dataset(Dataset):
             raise
 
         self.cfg = cfg
-        
+
         truth = {}
         f = open(lable_path, 'r', encoding='utf-8')
         for line in f.readlines():
@@ -280,8 +259,7 @@ class Yolo_dataset(Dataset):
                 truth[data[0]].append([int(j) for j in i.split(',')])
 
         self.truth = truth
-        
-        self.global_cn = 1
+
     def __len__(self):
         return len(self.truth.keys())
 
@@ -290,7 +268,6 @@ class Yolo_dataset(Dataset):
         bboxes = np.array(self.truth.get(img_path), dtype=np.float)
         img_path = os.path.join(self.cfg.dataset_dir, img_path)
         use_mixup = self.cfg.mixup
-        
         if random.randint(0, 1):
             use_mixup = 0
 
@@ -305,7 +282,7 @@ class Yolo_dataset(Dataset):
 
         out_img = np.zeros([self.cfg.h, self.cfg.w, 3])
         out_bboxes = []
-        
+
         for i in range(use_mixup + 1):
             if i != 0:
                 img_path = random.choice(list(self.truth.keys()))
@@ -371,13 +348,7 @@ class Yolo_dataset(Dataset):
 
             ai = image_data_augmentation(img, self.cfg.w, self.cfg.h, pleft, ptop, swidth, sheight, flip,
                                          dhue, dsat, dexp, gaussian_noise, blur, truth)
-            
-            #data_path = 'data_aug/crop/'+str(self.global_cn)+'.jpg'
-            #self.global_cn+=1
-            #print(ai.shape)
-            #cv2.imwrite(data_path,cv2.cvtColor(ai,cv2.COLOR_BGR2RGB))#added
-            #print('save {}.jpg'.format(self.global_cn-1))
-            
+
             if use_mixup == 0:
                 out_img = ai
                 out_bboxes = truth
@@ -406,13 +377,7 @@ class Yolo_dataset(Dataset):
                 # print(img_path)
         if use_mixup == 3:
             out_bboxes = np.concatenate(out_bboxes, axis=0)
-        else:
-            out_bboxes = np.array(out_bboxes)
         out_bboxes1 = np.zeros([self.cfg.boxes, 5])
-        #print(out_bboxes)
-        #print(out_bboxes.shape)
-        if out_bboxes.shape[0]==0:
-            return out_img, out_bboxes1
         out_bboxes1[:min(out_bboxes.shape[0], self.cfg.boxes)] = out_bboxes[:min(out_bboxes.shape[0], self.cfg.boxes)]
         return out_img, out_bboxes1
 
