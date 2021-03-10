@@ -411,7 +411,7 @@ class Yolo_dataset(Dataset):
         out_bboxes1 = np.zeros([self.cfg.boxes, 5])
         #print(out_bboxes)
         #print(out_bboxes.shape)
-        if out_bboxes.shape[0]==0: //不知為何有些out_bboxes里沒有值，可能是因為crop的原因
+        if out_bboxes.shape[0]==0: #不知為何有些out_bboxes里沒有值，可能是因為crop的原因
             return out_img, out_bboxes1
         out_bboxes1[:min(out_bboxes.shape[0], self.cfg.boxes)] = out_bboxes[:min(out_bboxes.shape[0], self.cfg.boxes)]
         return out_img, out_bboxes1

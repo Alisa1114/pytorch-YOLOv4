@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch import optim
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
 import logging
 import os, sys
 from tqdm import tqdm
@@ -26,6 +26,15 @@ from easydict import EasyDict as edict
 from torch.nn import functional as F
 
 import numpy as np
+#在txt檔紀錄loss
+"""
+import pickle
+import os
+from os import listdir, getcwd
+from os.path import join
+import random
+"""
+
 
 
 def bboxes_iou(bboxes_a, bboxes_b, xyxy=True):
@@ -256,9 +265,11 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
     val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8,
                             pin_memory=True, drop_last=True)
     
-    writer = SummaryWriter(log_dir=config.TRAIN_TENSORBOARD_DIR,
-                           filename_suffix=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}',
-                           comment=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}')
+    outfile = open('loss.txt', 'w')
+    
+    #writer = SummaryWriter(log_dir=config.TRAIN_TENSORBOARD_DIR,
+    #                       filename_suffix=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}',
+    #                       comment=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}')
     # writer.add_images('legend',
     #                   torch.from_numpy(train_dataset.label2colorlegend2(cfg.DATA_CLASSES).transpose([2, 0, 1])).to(
     #                       device).unsqueeze(0))
@@ -329,6 +340,16 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                     model.zero_grad()
 
                 if global_step % (log_step * config.subdivisions) == 0:
+                    
+                    outfile.write(str(round(loss.item(), 3))+" "+
+                                  str(round(loss_xy.item(), 3))+" "+
+                                  str(round(loss_wh.item(), 3))+" "+
+                                  str(round(loss_obj.item(), 3))+" "+
+                                  str(round(loss_cls.item(), 3))+" "+
+                                  str(round(loss_l2.item(), 3))+" "+
+                                  str(round(scheduler.get_lr()[0] * config.batch, 3))+"\n")
+                    
+                    '''
                     writer.add_scalar('train/Loss', loss.item(), global_step)
                     writer.add_scalar('train/loss_xy', loss_xy.item(), global_step)
                     writer.add_scalar('train/loss_wh', loss_wh.item(), global_step)
@@ -336,7 +357,6 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                     writer.add_scalar('train/loss_cls', loss_cls.item(), global_step)
                     writer.add_scalar('train/loss_l2', loss_l2.item(), global_step)
                     writer.add_scalar('lr', scheduler.get_lr()[0] * config.batch, global_step)
-                    '''
                     pbar.set_postfix({'loss (batch)': loss.item(), 'loss_xy': loss_xy.item(),
                                         'loss_wh': loss_wh.item(),
                                         'loss_obj': loss_obj.item(),
@@ -363,7 +383,8 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                 torch.save(model.state_dict(), os.path.join(config.checkpoints, f'Yolov4_epoch{epoch + 1}.pth'))
                 logging.info(f'Checkpoint {epoch + 1} saved !')
 
-    writer.close()
+    #writer.close()
+    outfile.close()
 
 
 def get_args(**kwargs):
