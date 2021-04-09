@@ -17,6 +17,7 @@ from models import *
 import argparse
 from tool.utils import *
 import time
+from cfg import Cfg
 
 
 def arg_parse():
@@ -32,13 +33,15 @@ def arg_parse():
     "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
                         default="160", type=str)
     parser.add_argument("--num_classes", dest="num_classes", help="Number of classes", default=2)
+    parser.add_argument("-w","--weightsfile", dest="weightsfile", help="Weights File", default="checkpoints/Yolov4_epoch600.pth")
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     cfgfile = "cfg/yolov4.cfg"
-    weightsfile = "checkpoints/Yolov4_epoch300.pth"
-
+    #weightsfile = "checkpoints/Yolov4_epoch600.pth"
+    #weightsfile = "checkpoints/Yolov4_epoch150.pth"
+    
     args = arg_parse()
     confidence = float(args.confidence)
     nms_thesh = float(args.nms_thresh)
@@ -48,7 +51,7 @@ if __name__ == '__main__':
     class_names = load_class_names("data/_classes.txt")
     
     model = Yolov4(n_classes=num_classes)
-    pretrained_dict = torch.load(weightsfile, map_location=torch.device('cuda'))
+    pretrained_dict = torch.load(args.weightsfile, map_location=torch.device('cuda'))
     model.load_state_dict(pretrained_dict)
     #model = Darknet(cfgfile) #原本的
     #model.load_weights(weightsfile) #原本的
@@ -60,19 +63,27 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(0)
 
     assert cap.isOpened(), 'Cannot capture source'
+    
+    frame_width = int(cap.get(3))
+    frame_height = int(cap.get(4))
+    
+    out = cv2.VideoWriter('outpy.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (frame_width, frame_height))
 
     frames = 0
     start = time.time()
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
+            
             #sized = cv2.resize(frame, (model.width, model.height)) #原本的
-            sized = cv2.resize(frame, (608, 608))
+            sized = cv2.resize(frame, (Cfg.height, Cfg.width))
             #sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB) #用攝影機捕捉的影像原本就是RGB了，大概
             boxes = do_detect(model, sized, 0.5, num_classes, 0.4)
             #boxes = do_detect(model, sized, 0.5, 0.4, CUDA) #原本的
 
             orig_im = plot_boxes_cv2(frame, boxes, class_names=class_names)
+            #cv2.putText(orig_im, boxes[], (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+            out.write(orig_im)
 
             cv2.imshow("frame", orig_im)
             key = cv2.waitKey(1)

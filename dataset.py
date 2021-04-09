@@ -378,6 +378,8 @@ class Yolo_dataset(Dataset):
             #cv2.imwrite(data_path,cv2.cvtColor(ai,cv2.COLOR_BGR2RGB))#added
             #print('save {}.jpg'.format(self.global_cn-1))
             
+             
+            
             if use_mixup == 0:
                 out_img = ai
                 out_bboxes = truth

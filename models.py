@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from cfg import Cfg
 
 
 class Mish(torch.nn.Module):
@@ -475,7 +476,7 @@ if  __name__ == "__main__":
     #opencv
     img = cv2.imread(imgfile)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    sized = cv2.resize(img, (608, 608))
+    sized = cv2.resize(img, (Cfg.height, Cfg.width))
     
     
     

@@ -24,7 +24,7 @@ from models import Yolov4
 import argparse
 from easydict import EasyDict as edict
 from torch.nn import functional as F
-
+import math
 import numpy as np
 #在txt檔紀錄loss
 """
@@ -68,18 +68,26 @@ def bboxes_iou(bboxes_a, bboxes_b, xyxy=True):
         br = torch.min(bboxes_a[:, None, 2:], bboxes_b[:, 2:])
         area_a = torch.prod(bboxes_a[:, 2:] - bboxes_a[:, :2], 1)
         area_b = torch.prod(bboxes_b[:, 2:] - bboxes_b[:, :2], 1)
+        con_tl = torch.min(bboxes_a[:, None, :2], bboxes_b[:, :2])
+        con_br = torch.max(bboxes_a[:, None, 2:], bboxes_b[:, 2:])
     else:
         tl = torch.max((bboxes_a[:, None, :2] - bboxes_a[:, None, 2:] / 2),
                        (bboxes_b[:, :2] - bboxes_b[:, 2:] / 2))
         # bottom right
         br = torch.min((bboxes_a[:, None, :2] + bboxes_a[:, None, 2:] / 2),
                        (bboxes_b[:, :2] + bboxes_b[:, 2:] / 2))
-
+        con_tl = torch.min((bboxes_a[:, None, :2] - bboxes_a[:, None, 2:] / 2),
+                           (bboxes_b[:, :2] - bboxes_b[:, 2:] / 2))
+        con_br = torch.max((bboxes_a[:, None, :2] + bboxes_a[:, None, 2:] / 2),
+                           (bboxes_b[:, :2] + bboxes_b[:, 2:] / 2))
         area_a = torch.prod(bboxes_a[:, 2:], 1)
         area_b = torch.prod(bboxes_b[:, 2:], 1)
+    c2 = torch.pow(con_br - con_tl, 2).sum(dim=2) + 1e-16
     en = (tl < br).type(tl.type()).prod(dim=2)
     area_i = torch.prod(br - tl, 2) * en  # * ((tl < br).all())
-    return area_i / (area_a[:, None] + area_b - area_i)
+    iou = area_i / (area_a[:, None] + area_b - area_i)
+    return bboxes_ciou(bboxes_a, bboxes_b, iou, c2)
+    #return iou
 
 
 def bboxes_giou(bboxes_a, bboxes_b, xyxy=True):
@@ -90,8 +98,21 @@ def bboxes_diou(bboxes_a, bboxes_b, xyxy=True):
     pass
 
 
-def bboxes_ciou(bboxes_a, bboxes_b, xyxy=True):
-    pass
+def bboxes_ciou(bboxes_a, bboxes_b,iou, c2, xyxy=True):
+    
+    rho2 = ((bboxes_a[:, None, 0] + bboxes_a[:, None, 2]) - (bboxes_b[:, 0] + bboxes_b[:, 2])) ** 2 / 4 + (
+                (bboxes_a[:, None, 1] + bboxes_a[:, None, 3]) - (bboxes_b[:, 1] + bboxes_b[:, 3])) ** 2 / 4
+    w1 = bboxes_a[:, 2] - bboxes_a[:, 0]
+    h1 = bboxes_a[:, 3] - bboxes_a[:, 1]
+    w2 = bboxes_b[:, 2] - bboxes_b[:, 0]
+    h2 = bboxes_b[:, 3] - bboxes_b[:, 1]
+    v = (4 / math.pi ** 2) * torch.pow(torch.atan(w1 / h1).unsqueeze(1) - torch.atan(w2 / h2), 2)
+    with torch.no_grad():
+        alpha = v / (1 - iou + v)
+    return iou - (rho2 / c2 + v * alpha)  # CIoU
+    
+    #pass
+    
 
 
 class Yolo_loss(nn.Module):
@@ -99,7 +120,7 @@ class Yolo_loss(nn.Module):
         super(Yolo_loss, self).__init__()
         self.device = device
         self.strides = [8, 16, 32]
-        image_size = 608
+        image_size = Cfg.width
         self.n_classes = n_classes
         self.n_anchors = n_anchors
 
@@ -208,8 +229,11 @@ class Yolo_loss(nn.Module):
 
             # logistic activation for xy, obj, cls
             output[..., np.r_[:2, 4:n_ch]] = torch.sigmoid(output[..., np.r_[:2, 4:n_ch]])
-
+            
+            
+            
             pred = output[..., :4].clone()
+            #print(pred[..., 0].shape, self.grid_x[output_id].shape)
             pred[..., 0] += self.grid_x[output_id]
             pred[..., 1] += self.grid_y[output_id]
             pred[..., 2] = torch.exp(pred[..., 2]) * self.anchor_w[output_id]
@@ -227,14 +251,14 @@ class Yolo_loss(nn.Module):
             target[..., 2:4] *= tgt_scale
 
             loss_xy += F.binary_cross_entropy(input=output[..., :2], target=target[..., :2],
-                                              weight=tgt_scale * tgt_scale, size_average=False)
-            loss_wh += F.mse_loss(input=output[..., 2:4], target=target[..., 2:4], size_average=False) / 2
-            loss_obj += F.binary_cross_entropy(input=output[..., 4], target=target[..., 4], size_average=False)
-            loss_cls += F.binary_cross_entropy(input=output[..., 5:], target=target[..., 5:], size_average=False)
-            loss_l2 += F.mse_loss(input=output, target=target, size_average=False)
+                                              weight=tgt_scale * tgt_scale, reduction='sum')
+            loss_wh += F.mse_loss(input=output[..., 2:4], target=target[..., 2:4],         reduction='sum') / 2
+            loss_obj += F.binary_cross_entropy(input=output[..., 4], target=target[..., 4], reduction='sum')
+            loss_cls += F.binary_cross_entropy(input=output[..., 5:], target=target[..., 5:], reduction='sum')
+            loss_l2 += F.mse_loss(input=output, target=target, reduction='sum')
 
         loss = loss_xy + loss_wh + loss_obj + loss_cls
-
+        #loss = 0.75loss_xy + 0.75*loss_wh + loss_obj + loss_cls
         return loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2
 
 
@@ -254,25 +278,20 @@ def collate(batch):
 
 def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=20, img_scale=0.5):
     train_dataset = Yolo_dataset(config.train_label, config)
-    val_dataset = Yolo_dataset(config.val_label, config)
+    #val_dataset = Yolo_dataset(config.val_label, config)
 
     n_train = len(train_dataset)
-    n_val = len(val_dataset)
+    #n_val = len(val_dataset)
+    n_val = 0
+    
+    #print(config.batch, config.subdivisions, config.batch // config.subdivisions)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8, pin_memory=True, drop_last=True, collate_fn=collate)
 
-    train_loader = DataLoader(train_dataset, batch_size=config.batch // config.subdivisions, shuffle=True,
-                              num_workers=8, pin_memory=True, drop_last=True, collate_fn=collate)
-
-    val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8,
-                            pin_memory=True, drop_last=True)
+    #val_loader = DataLoader(val_dataset, batch_size=config.batch // config.subdivisions, shuffle=True, num_workers=8,
+     #                       pin_memory=True, drop_last=True)
     
     outfile = open('loss.txt', 'w')
     
-    #writer = SummaryWriter(log_dir=config.TRAIN_TENSORBOARD_DIR,
-    #                       filename_suffix=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}',
-    #                       comment=f'OPT_{config.TRAIN_OPTIMIZER}_LR_{config.learning_rate}_BS_{config.batch}_Sub_{config.subdivisions}_Size_{config.width}')
-    # writer.add_images('legend',
-    #                   torch.from_numpy(train_dataset.label2colorlegend2(cfg.DATA_CLASSES).transpose([2, 0, 1])).to(
-    #                       device).unsqueeze(0))
     max_itr = config.TRAIN_EPOCHS * n_train
     # global_step = cfg.TRAIN_MINEPOCH * n_train
     global_step = 0
@@ -314,13 +333,12 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
     model.train()
     for epoch in range(epochs):
         #model.train()
-        epoch_loss = 0.0
-        epoch_step = 0
-
+        #epoch_loss = 0.0
+        #epoch_step = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img', ncols=50) as pbar:
-            for i, batch in enumerate(train_loader):
+            for epoch_step, batch in enumerate(train_loader):
                 global_step += 1
-                epoch_step += 1
+                #epoch_step += 1
                 images = batch[0]
                 bboxes = batch[1]
 
@@ -329,12 +347,12 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
 
                 bboxes_pred = model(images)
                 loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(bboxes_pred, bboxes)
-                # loss = loss / config.subdivisions
+                #loss = loss / config.subdivisions
                 loss.backward()
+               
+                #epoch_loss += loss.item()
                 
-                epoch_loss += loss.item()
-                
-                if global_step  % config.subdivisions == 0:
+                if ((epoch_step+1) % config.subdivisions) == 0:
                     optimizer.step()
                     scheduler.step()
                     model.zero_grad()
@@ -349,22 +367,6 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
                                   str(round(loss_l2.item(), 3))+" "+
                                   str(round(scheduler.get_lr()[0] * config.batch, 3))+"\n")
                     
-                    '''
-                    writer.add_scalar('train/Loss', loss.item(), global_step)
-                    writer.add_scalar('train/loss_xy', loss_xy.item(), global_step)
-                    writer.add_scalar('train/loss_wh', loss_wh.item(), global_step)
-                    writer.add_scalar('train/loss_obj', loss_obj.item(), global_step)
-                    writer.add_scalar('train/loss_cls', loss_cls.item(), global_step)
-                    writer.add_scalar('train/loss_l2', loss_l2.item(), global_step)
-                    writer.add_scalar('lr', scheduler.get_lr()[0] * config.batch, global_step)
-                    pbar.set_postfix({'loss (batch)': loss.item(), 'loss_xy': loss_xy.item(),
-                                        'loss_wh': loss_wh.item(),
-                                        'loss_obj': loss_obj.item(),
-                                        'loss_cls': loss_cls.item(),
-                                        'loss_l2': loss_l2.item(),
-                                        'lr': scheduler.get_lr()[0] * config.batch
-                                        })
-                    '''
                     logging.info('Train step_{}: loss : {},loss xy : {},loss wh : {},'
                                   'loss obj : {}，loss cls : {},loss l2 : {},lr : {}'
                                   .format(global_step, loss.item(), loss_xy.item(),
@@ -392,7 +394,7 @@ def get_args(**kwargs):
     parser = argparse.ArgumentParser(description='Train the Model on images and target masks',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=2,help='Batch size', dest='batch')
-    parser.add_argument('-s', '--subdivisions', metavar='S', type=int, nargs='?', default=1,help='subdivisions', dest='subdivisions')
+    parser.add_argument('-s', '--subdivisions', metavar='S', type=int, nargs='?', default=Cfg.subdivisions,help='subdivisions', dest='subdivisions')
     parser.add_argument('-l', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.001,
                         help='Learning rate', dest='learning_rate')
     parser.add_argument('-f', '--load', dest='load', type=str, default=None,
