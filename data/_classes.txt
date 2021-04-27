@@ -1,2 +1,3 @@
-WearTheLifeJacket
-NotWearTheLifeJacket
+O
+X
+B
