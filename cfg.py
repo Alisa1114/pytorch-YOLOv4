@@ -14,9 +14,9 @@ from easydict import EasyDict
 
 Cfg = EasyDict()
 Cfg.batch = 64
-Cfg.subdivisions = 16
-Cfg.width = 608
-Cfg.height = 608
+Cfg.subdivisions = 4 # 原為16
+Cfg.width = 224
+Cfg.height = 224
 Cfg.channels = 3
 Cfg.momentum = 0.949
 Cfg.decay = 0.0005
@@ -33,7 +33,7 @@ Cfg.policy = Cfg.steps
 Cfg.scales = .1, .1
 
 Cfg.cutmix = 0
-Cfg.mosaic = 1
+Cfg.mosaic = 1 # mosaic關掉了
 
 Cfg.letter_box = 0
 Cfg.jitter = 0.2
@@ -61,6 +61,9 @@ elif Cfg.cutmix:
     Cfg.mixup = 2
 elif Cfg.mosaic:
     Cfg.mixup = 3
+else:
+    Cfg.mixup = 1
+    
 
 Cfg.checkpoints = 'checkpoints'
 Cfg.TRAIN_TENSORBOARD_DIR = 'log'

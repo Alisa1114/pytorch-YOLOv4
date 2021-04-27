@@ -13,6 +13,7 @@ import imghdr  # get_image_size
 
 
 def sigmoid(x):
+    #x = x.astype(np.float128)
     return 1.0 / (np.exp(-x) + 1.)
 
 
@@ -89,6 +90,7 @@ def bbox_ious(boxes1, boxes2, x1y1x2y2=True):
 
 
 def nms(boxes, nms_thresh):
+    #print('before nms boxes number:'+str(len(boxes)))#inference
     if len(boxes) == 0:
         return boxes
 
@@ -107,6 +109,7 @@ def nms(boxes, nms_thresh):
                 if bbox_iou(box_i, box_j, x1y1x2y2=False) > nms_thresh:
                     # print(box_i, box_j, bbox_iou(box_i, box_j, x1y1x2y2=False))
                     box_j[4] = 0
+    #print('after nms boxes number:'+str(len(out_boxes)))#inference
     return out_boxes
 
 
@@ -210,6 +213,9 @@ def get_region_boxes_out_model(output, conf_thresh, num_classes, anchors, num_an
     anchor_step = len(anchors) // num_anchors
     if len(output.shape) == 3:
         output = np.expand_dims(output, axis=0)
+    #print(output.shape)
+    #print(num_classes)
+    #print(num_anchors)
     batch = output.shape[0]
     assert (output.shape[1] == (5 + num_classes) * num_anchors)
     h = output.shape[2]
@@ -302,8 +308,11 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
 
     width = img.shape[1]
     height = img.shape[0]
+    warn = False
     for i in range(len(boxes)):
         box = boxes[i]
+        if (box[0] < 0) | (box[1] < 0) | (box[2] < 0) | (box[3] < 0):
+            continue
         x1 = int((box[0] - box[2] / 2.0) * width)
         y1 = int((box[1] - box[3] / 2.0) * height)
         x2 = int((box[0] + box[2] / 2.0) * width)
@@ -316,6 +325,9 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
         if len(box) >= 7 and class_names:
             cls_conf = box[5]
             cls_id = box[6]
+            
+            if class_names[cls_id] == 'X' :
+                warn = True
             print('%s: %f' % (class_names[cls_id], cls_conf))
             classes = len(class_names)
             offset = cls_id * 123457 % classes
@@ -324,12 +336,19 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
             blue = get_color(0, offset, classes)
             if color is None:
                 rgb = (red, green, blue)
-            img = cv2.putText(img, class_names[cls_id], (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 10, rgb, 5)
-        img = cv2.rectangle(img, (x1, y1), (x2, y2), rgb, 5)
+            try:
+                img = cv2.putText(img, class_names[cls_id], (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 3, rgb, 2)
+                img = cv2.putText(img, str(cls_conf), (int(x1)+10, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, rgb, 2)
+            except:
+                #print(x1, y1)
+                pass
+        #print(x1, y1, x2, y2)
+        img = cv2.rectangle(img, (x1, y1), (x2, y2), rgb, 10)
     if savename:
         print("save plot results to %s" % savename)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         cv2.imwrite(savename, img)
-    return img
+    return img, warn
 
 
 def plot_boxes(img, boxes, savename=None, class_names=None):
@@ -450,6 +469,7 @@ def post_processing(img, conf_thresh, n_classes, nms_thresh, list_features_numpy
         # 分别对每一张图片的结果进行nms
         t3 = time.time()
         boxes = [nms(bboxs, nms_thresh) for bboxs in bboxs_for_imgs]
+        
     else:
         boxes = boxes[0][0] + boxes[1][0] + boxes[2][0]
         t3 = time.time()

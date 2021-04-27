@@ -18,7 +18,10 @@ import argparse
 from tool.utils import *
 import time
 from cfg import Cfg
+import threading
 
+def play_sound():
+    os.system('mpg321 test1.mp3')
 
 def arg_parse():
     """
@@ -33,7 +36,7 @@ def arg_parse():
     "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
                         default="160", type=str)
     parser.add_argument("--num_classes", dest="num_classes", help="Number of classes", default=2)
-    parser.add_argument("-w","--weightsfile", dest="weightsfile", help="Weights File", default="checkpoints/Yolov4_epoch600.pth")
+    parser.add_argument("-w","--weightsfile", dest="weightsfile", help="Weights File", default="checkpoints/Yolov4_epoch300.pth")
     return parser.parse_args()
 
 
@@ -67,10 +70,12 @@ if __name__ == '__main__':
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
     
-    out = cv2.VideoWriter('outpy.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (frame_width, frame_height))
+    #out = cv2.VideoWriter('outpy.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (frame_width, frame_height))
 
     frames = 0
     start = time.time()
+    count = 0
+    
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
@@ -81,15 +86,22 @@ if __name__ == '__main__':
             boxes = do_detect(model, sized, 0.5, num_classes, 0.4)
             #boxes = do_detect(model, sized, 0.5, 0.4, CUDA) #原本的
 
-            orig_im = plot_boxes_cv2(frame, boxes, class_names=class_names)
+            orig_im, warn = plot_boxes_cv2(frame, boxes, class_names=class_names)
             #cv2.putText(orig_im, boxes[], (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-            out.write(orig_im)
+            #out.write(orig_im)
 
             cv2.imshow("frame", orig_im)
             key = cv2.waitKey(1)
             if key & 0xFF == ord('q'):
                 break
             frames += 1
+            count += 1
             print("FPS of the video is {:5.2f}".format(frames / (time.time() - start)))
+            
+            if warn & (count >= 100):
+                t = threading.Thread(target = play_sound)
+                t.start()
+                count = 0
+                
         else:
             break

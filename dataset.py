@@ -154,7 +154,7 @@ def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue,
         if blur:
             #print('blur')
             if blur == 1:
-                dst = cv2.GaussianBlur(sized, (17, 17), 0)
+                dst = cv2.GaussianBlur(sized, (3, 3), 0)
                 #dst = cv2.blur(sized, (17, 17), 0)
                 # cv2.bilateralFilter(sized, dst, 17, 75, 75)
             else:
@@ -276,6 +276,7 @@ class Yolo_dataset(Dataset):
         for line in f.readlines():
             data = line.split(" ")
             truth[data[0]] = []
+            #print(data[0])
             for i in data[1:]:
                 truth[data[0]].append([int(j) for j in i.split(',')])
 
